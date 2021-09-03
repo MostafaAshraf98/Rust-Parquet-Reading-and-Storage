@@ -6,6 +6,8 @@ use parquet::record::{Row, RowAccessor};
 use std::time::Instant;
 use std::env;
 use parquet::schema::types::Type;
+use parquet::basic::Type as PhysicalType;
+use parquet::record::Field;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,7 +17,9 @@ fn main() {
     let (data, schema) = read_file(file_path);
     let reading_time = now.elapsed();
     println!("Reading Csv {:.3?}", reading_time);
-
+    for f in schema.get_fields() {
+        println!("{:?}", f);
+    }
         // for r in data {
     //     println!("{}", r);
     // }
@@ -25,23 +29,69 @@ fn main() {
     let reading_time = now.elapsed();
     println!("Operation {:.3?}", reading_time);
 
+    match result {
+        Ok(m) => {
+            for (k, v) in m {
+                println!("{} \t {:.3}", k, v);
+            }
+        }
+        Err(()) => {
+            println!("Error during Operation");
+        }
+    }
 }
 
 fn do_operation(data: &Vec<Row>, schema: &Type, operation: &str, column: &str, group_by: &str) -> Result<HashMap<String, f64>, ()> {
+    let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
     match operation.as_ref() {
-        "avg" => {},
-        "sum" => {},
-        _ => {}
+        "avg" => Err(()),
+        "sum" => sum(data, schema, column_idx, group_by_idx),
+        _ => Err(())
     }
-    Err(())
 }
 
-fn sum(data: &Vec<Row>, schema: &Type, column: &str, group_by: &str) -> Result<HashMap<String, f64>, ()> {
+fn sum(data: &Vec<Row>, schema: &Type, column_idx: usize, group_by_idx: usize) -> Result<HashMap<String, f64>, ()> {
     // assuming field is integer
     let mut sum: HashMap<String, f64> = HashMap::new();
-    
-    let mut column_idx = 0;
-    let mut group_by_idx = 0;
+
+    for r in data {
+        // println!("{:?}", r.get_column_iter().nth(group_by_idx));
+        let key: String = r.get_column_iter().nth(group_by_idx).unwrap().1.to_string();
+        let value: f64 = match r.get_column_iter().nth(column_idx).unwrap().1 {
+            Field::Null => continue,
+            _ => {
+                r.get_column_iter().nth(column_idx).unwrap().1.to_string().parse::<f64>().unwrap()
+            }
+        };
+        let entry = sum.entry(key).or_insert(0.0);
+        *entry += value;
+    }
+    Ok(sum)
+}
+
+// match schema.get_fields()[group_by_idx].get_physical_type()  {
+//     PhysicalType::BYTE_ARRAY => {
+//         match schema.get_fields()[column_idx].get_physical_type() {
+//             PhysicalType::INT32 => {},
+//             PhysicalType::INT64 => {},
+//             PhysicalType::INT96 => {},
+//             PhysicalType::FLOAT => {},
+//             PhysicalType::DOUBLE => {},
+//             _ => {}
+//         }
+//     },
+//     PhysicalType::INT32 => {},
+//     PhysicalType::INT64 => {},
+//     PhysicalType::INT96 => {},
+//     PhysicalType::DOUBLE => {},
+//     PhysicalType::FLOAT => {},
+//     PhysicalType::BOOLEAN => {},
+//     _ => {}
+// }
+
+fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
+    let mut column_idx: usize = 0;
+    let mut group_by_idx: usize = 0;
     
     // get idx of columns
     let mut i = 0;
@@ -50,16 +100,11 @@ fn sum(data: &Vec<Row>, schema: &Type, column: &str, group_by: &str) -> Result<H
             column_idx = i;
         } 
         if f.name() == group_by {
-            group_by_idx = 1;
+            group_by_idx = i;
         }
         i+=1;
     }
-
-    for r in data {
-        let entry = sum.entry(r.get_string(group_by_idx).unwrap().to_string()).or_insert(0.0);
-        *entry += r.get_int(column_idx).unwrap() as f64;
-    }
-    Ok(sum)
+    (column_idx, group_by_idx)
 }
 
 
