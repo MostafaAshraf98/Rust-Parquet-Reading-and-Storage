@@ -16,10 +16,10 @@ fn main() {
     let now = Instant::now();    
     let (data, schema) = read_file(file_path);
     let reading_time = now.elapsed();
-    println!("Reading Csv {:.3?}", reading_time);
-    for f in schema.get_fields() {
-        println!("{:?}", f);
-    }
+    println!("Reading File {:.3?}", reading_time);
+    // for f in schema.get_fields() {
+    //     println!("{:?}", f);
+    // }
         // for r in data {
     //     println!("{}", r);
     // }
@@ -41,7 +41,7 @@ fn main() {
     }
 }
 
-fn do_operation(data: &Vec<Row>, schema: &Type, operation: &str, column: &str, group_by: &str) -> Result<HashMap<String, f64>, ()> {
+fn do_operation(data: &SerializedFileReader<File>, schema: &Type, operation: &str, column: &str, group_by: &str) -> Result<HashMap<String, f64>, ()> {
     let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
     match operation.as_ref() {
         "avg" => Err(()),
@@ -50,11 +50,12 @@ fn do_operation(data: &Vec<Row>, schema: &Type, operation: &str, column: &str, g
     }
 }
 
-fn sum(data: &Vec<Row>, schema: &Type, column_idx: usize, group_by_idx: usize) -> Result<HashMap<String, f64>, ()> {
+fn sum(reader: &SerializedFileReader<File>, schema: &Type, column_idx: usize, group_by_idx: usize) -> Result<HashMap<String, f64>, ()> {
     // assuming field is integer
     let mut sum: HashMap<String, f64> = HashMap::new();
 
-    for r in data {
+    let mut iter = reader.get_row_iter(None).unwrap();
+    while let Some(r) = iter.next() {
         // println!("{:?}", r.get_column_iter().nth(group_by_idx));
         let key: String = r.get_column_iter().nth(group_by_idx).unwrap().1.to_string();
         let value: f64 = match r.get_column_iter().nth(column_idx).unwrap().1 {
@@ -66,6 +67,18 @@ fn sum(data: &Vec<Row>, schema: &Type, column_idx: usize, group_by_idx: usize) -
         let entry = sum.entry(key).or_insert(0.0);
         *entry += value;
     }
+    // for r in data {
+    //     // println!("{:?}", r.get_column_iter().nth(group_by_idx));
+    //     let key: String = r.get_column_iter().nth(group_by_idx).unwrap().1.to_string();
+    //     let value: f64 = match r.get_column_iter().nth(column_idx).unwrap().1 {
+    //         Field::Null => continue,
+    //         _ => {
+    //             r.get_column_iter().nth(column_idx).unwrap().1.to_string().parse::<f64>().unwrap()
+    //         }
+    //     };
+    //     let entry = sum.entry(key).or_insert(0.0);
+    //     *entry += value;
+    // }
     Ok(sum)
 }
 
@@ -108,16 +121,17 @@ fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
 }
 
 
-fn read_file(file_path: &str) -> (Vec<Row>, Type) {
+fn read_file(file_path: &str) -> (SerializedFileReader<File>, Type) {
     let file = File::open(&Path::new(file_path)).unwrap();
     let reader = SerializedFileReader::new(file).unwrap();
-    let mut iter = reader.get_row_iter(None).unwrap();
-    let mut data: Vec<Row> = Vec::new();
-    while let Some(record) = iter.next() {
-        data.push(record);
-    }
+    // let mut iter = reader.get_row_iter(None).unwrap();
+    // // let mut data: Vec<Row> = Vec::new();
+    // // while let Some(record) = iter.next() {
+    // //     data.push(record);
+    // // }
     let schema = reader.metadata().file_metadata().schema().clone();
-    (data, schema)
+    // (data, schema)
+    (reader, schema)
 }
 
 fn parse_args(args: &[String]) -> (&str, &str, &str, &str) {
