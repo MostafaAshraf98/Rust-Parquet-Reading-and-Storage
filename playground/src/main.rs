@@ -43,7 +43,7 @@ fn main() {
     args.group_by = env::args().nth(3);
     args.query = env::args().nth(4);
     args.select = env::args().nth(5);
-    let filename_thread = Arc::new(String::from(args.filename.clone())); //this serves as a shared ownership variable betweeen threads
+    let filename_thread = Arc::new(String::from(args.filename.clone())); //this serves as a shared ownership variable between threads
 
     //---------------------------VARIABLES-----------------------------------
 
@@ -68,7 +68,7 @@ fn main() {
         let mut line: String = String::new(); // serves as a buffer;
 
         let handle = thread::spawn(move || 
-            // the thread take ownership of all the variables that is within its scope
+            // the thread takes ownership of all the variables that is within its scope
             {
             let mut counter_lock = counter.lock().unwrap(); //locking the shared variable counter before modifying it
             let start: u64 = ((*counter_lock) * part_each) as u64; //the number of starting line in
@@ -76,8 +76,7 @@ fn main() {
             *counter_lock += 1; // incrementing the count of the created threads
             std::mem::drop(counter_lock); //drops the lock over this variable as we do not need it anymore in this scope
 
-            let mut vec_storage_lock = vec_storage.lock().unwrap(); //locking the shared vector
-
+            
             let f = File::open(&*filename_thread).expect("Unable to open file");
             let reader = &mut IndexedLineReader::new(BufReader::new(f), part_each);
             reader.seek(SeekFrom::Start(start)).expect("Unable to seek over the required line"); // move the reader to the required line
@@ -88,8 +87,11 @@ fn main() {
                 if eof != 0 
                 // if it is not the end of file... this is used as a safety net 
                 {
-                    // vec_storage_result.push(vec!["hi"]);
+                    let mut vec_storage_lock = vec_storage.lock().unwrap(); //locking the shared vector
+                    // vec_storage_lock.push(vec!["hi"]);
                     vec_storage_lock.push(line.clone().par_split(',').map(|s| s.to_string()).collect()); // we need to push a clone of it
+                    std::mem::drop(vec_storage_lock); //drops the lock over this variable as we do not need it anymore in this scope
+
                     line.clear();
                 }
             }
