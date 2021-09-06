@@ -66,7 +66,6 @@ fn main() {
         let vec_storage = Arc::clone(&vec_storage); // clone of the vector storage
         let filename_thread = Arc::clone(&filename_thread); // clone of the filename
         let mut line: String = String::new(); // serves as a buffer;
-        let mut vec:Vec<&str>;
 
         let handle = thread::spawn(move || 
             // the thread take ownership of all the variables that is within its scope
@@ -89,9 +88,8 @@ fn main() {
                 if eof != 0 
                 // if it is not the end of file... this is used as a safety net 
                 {
-                    // vec_storage_lock.push(vec!["hi"]);
-                    vec = (line.as_ref()).par_split(',').collect::<Vec<&str>>();
-                    vec_storage_lock.push(vec.clone()); // we need to push a clone of it
+                    // vec_storage_result.push(vec!["hi"]);
+                    vec_storage_lock.push(line.clone().par_split(',').map(|s| s.to_string()).collect()); // we need to push a clone of it
                     line.clear();
                 }
             }
