@@ -88,7 +88,7 @@ fn main() {
                 // if it is not the end of file... this is used as a safe net 
                 {
                     // vec_storage_result.push(vec!["hi"]);
-                    vec_storage_result.push(line.clone().par_split(',').collect()); // we need to push a clone of it
+                    vec_storage_result.push(line.clone().par_split(',').map(|s| s.to_string()).collect()); // we need to push a clone of it
                     line.clear();
                 }
             }
