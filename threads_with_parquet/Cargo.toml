@@ -1,0 +1,11 @@
+[package]
+name = "threads_with_parquet"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rayon = "1.5.1"
+indexed-line-reader = "0.2.1"
+parquet = "5.3.0"
