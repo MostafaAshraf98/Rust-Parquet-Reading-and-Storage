@@ -3,6 +3,7 @@ use std::path::Path;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::{Row, RowAccessor};
 use std::time::Instant;
+use parquet::schema::types::Type;
 
 
 fn main() {
