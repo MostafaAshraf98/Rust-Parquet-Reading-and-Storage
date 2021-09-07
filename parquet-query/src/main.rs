@@ -54,6 +54,14 @@ fn sum(reader: &SerializedFileReader<File>, schema: &Type, column_idx: usize, gr
     // assuming field is integer
     let mut sum: HashMap<String, f64> = HashMap::new();
 
+    // let mut iter = reader.get_row_iter(None).unwrap();
+    // while let Some(r) = iter.next() {
+    //     let key: i32 = r.get_long(group_by_idx).unwrap() as i32;
+    //     let value: f64 = r.get_double(column_idx).unwrap();
+    //     let entry = sum.entry(key).or_insert(0.0);
+    //     *entry += value;
+    // }
+
     let mut iter = reader.get_row_iter(None).unwrap();
     while let Some(r) = iter.next() {
         // println!("{:?}", r.get_column_iter().nth(group_by_idx));
