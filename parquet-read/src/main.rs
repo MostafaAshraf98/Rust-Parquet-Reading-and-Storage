@@ -3,6 +3,7 @@ use std::path::Path;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::{Row, RowAccessor};
 use std::time::Instant;
+use parquet::schema::types::Type;
 
 
 fn main() {
@@ -18,6 +19,9 @@ fn main() {
     let reading_time = now.elapsed();
     println!("Reading Csv {:.3?}", reading_time);    
 
+    for f in reader.metadata().file_metadata().schema().get_fields() {
+        println!("{:?}", f);
+    }
     // for r in data {
     //     println!("{}", r);
     // }
