@@ -13,7 +13,7 @@ fn main() {
     let mut iter = reader.get_row_iter(None).unwrap();
     let mut data: Vec<Row> = Vec::new();
     while let Some(record) = iter.next() {
-        data.push(record);
+        // data.push(record);
     }
     let reading_time = now.elapsed();
     println!("Reading Csv {:.3?}", reading_time);    

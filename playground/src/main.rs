@@ -43,18 +43,18 @@ fn main() {
     args.group_by = env::args().nth(3);
     args.query = env::args().nth(4);
     args.select = env::args().nth(5);
-    let filename_thread = Arc::new(String::from(args.filename.clone())); //this serves as a shared ownership variable betweeen threads
+    let filename_thread = Arc::new(String::from(args.filename.clone())); //this serves as a shared ownership variable between threads
 
     //---------------------------VARIABLES-----------------------------------
 
     let file = File::open(&args.filename).expect("Unable to open file");
     let reader = BufReader::new(file);
 
-    let count: u64 = reader.lines().fold(0, |sum, _| sum + 1); // the number of records in the file
-    println!("The number of records in the file is: {}", count);
-    let part_each: u64 = (count as f64 / args.number_of_threads as f64).ceil() as u64; //the number of records each thread will take
+    let count_records: u64 = reader.lines().fold(0, |sum, _| sum + 1); // the number of records in the file
+    println!("The number of records in the file is: {}", count_records);
+    let part_each: u64 = (count_records as f64 / args.number_of_threads as f64).ceil() as u64; //the number of records each thread will take
     println!("part_each = {}",part_each);
-    let vec_storage = Arc::new(Mutex::new(vec![vec![]])); // stores the records after reading them
+    let vec_storage = Arc::new(Mutex::new(vec![])); // stores the records after reading them
 
     let counter = Arc::new(Mutex::new(0)); // this keeps count of the threads we created so far and it is shared between the threads
     let mut handles = vec![]; // this is the vector of handles of all the created threads so that the main waits for them to finish before continuing the execution of the code
@@ -63,34 +63,39 @@ fn main() {
     for _ in 0..args.number_of_threads {
         // looping over the number of threads
         let counter = Arc::clone(&counter); // this is a a clone/reference that points to the same allocation of the counter variable
-        let vec_storage_clone = Arc::clone(&vec_storage); // clone of the vector storage
-        let filename_clone = Arc::clone(&filename_thread); // clone of the filename
+        let vec_storage = Arc::clone(&vec_storage); // clone of the vector storage
+        let filename_thread = Arc::clone(&filename_thread); // clone of the filename
+
 
         let handle = thread::spawn(move || 
-            // the thread take ownership of all the variables that is within its scope
+            // the thread takes ownership of all the variables that is within its scope
             {
-            let mut num = counter.lock().unwrap(); //locking the shared variable counter before modifying it
-            let start: u64 = ((*num) * part_each) as u64; //the number of starting line in
+            let mut counter_lock = counter.lock().unwrap(); //locking the shared variable counter before modifying it
+            let start: u64 = ((*counter_lock) * part_each) as u64; //the number of starting line in
             // println!("The thread number {} starts at {}",num, start);
-            *num += 1; // incrementing the count of the created threads
-            std::mem::drop(num); //drops the lock over this variable as we do not need it anymore in this scope
+            *counter_lock += 1; // incrementing the count of the created threads
+            drop(counter_lock); //drops the lock over this variable as we do not need it anymore in this scope
 
-            let mut vec_storage_result = vec_storage_clone.lock().unwrap(); //locking the shared vector
-
-            let f = File::open(&*filename_clone).expect("Unable to open file");
+            
+            let f = File::open(&*filename_thread).expect("Unable to open file");
             let reader = &mut IndexedLineReader::new(BufReader::new(f), part_each);
             reader.seek(SeekFrom::Start(start)).expect("Unable to seek over the required line"); // move the reader to the required line
+
             let mut line: String = String::new(); // serves as a buffer;
-            
+            let mut vec: Vec<String> = Vec::new(); // the vector that stores the records of the current thread;
             for _ in 0..part_each {
                 let eof = reader.read_line(&mut line).expect("Unable to read line"); // read the line
                 if eof != 0 
-                // if it is not the end of file... this is used as a safe net 
+                // if it is not the end of file... this is used as a safety net 
                 {
-                    // vec_storage_result.push(vec!["hi"]);
-                    vec_storage_result.push(line.clone().par_split(',').map(|s| s.to_string()).collect()); // we need to push a clone of it
+                    // vec_storage_lock.push(vec!["hi"]);
+                    vec.push(line.clone()); // we need to push a clone of it
                     line.clear();
                 }
+                let mut vec_storage_lock = vec_storage.lock().unwrap(); //locking the shared vector
+                vec_storage_lock.push(vec.clone());
+                drop(vec_storage_lock); //drops the lock over this variable as we do not need it anymore in this scope
+                vec.clear();
             }
         });
         handles.push(handle); //add the handle of the created thread to the vector
@@ -99,8 +104,7 @@ fn main() {
         handle.join().unwrap(); // waits for all the threads to finish
     }
 
-    let vec_storage_clone = vec_storage.lock().unwrap();
-    println!("The number of read record is: {}",(*vec_storage_clone).len()); // see if we successfully read all the records 
+     println!("The number of read record is: {}",(*vec_storage.lock().unwrap()).len()); // see if we successfully read all the records 
     
     let end_time = start_time.elapsed(); // calculates the elapsed time
     println!("The reading time is: {:?}", end_time);
