@@ -1,26 +1,26 @@
 
-use indexed_line_reader::*;
+// use indexed_line_reader::*;
 // use rayon::prelude::*;
 use std::env;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+// use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use std::time::Instant;
-use parquet::basic::Type as PhysicalType;
+// use parquet::basic::Type as PhysicalType;
 use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::Field;
-use parquet::record::{Row, RowAccessor};
+// use parquet::record::Field;
+// use parquet::record::{Row, RowAccessor};
 use parquet::schema::types::Type;
 use parquet::column::reader::ColumnReaderImpl;
 use parquet::data_type::{Int64Type};
 use parquet::column::reader::ColumnReader;
 
 pub struct Args {
-    pub filename: String, // the CSV file to read (the path)
-    pub group_by: Option<String>, // list of columns to display
+    pub filename: String, // the parquet file to read (the path)
+    pub group_by: Option<String>, // the groupby column to display
     pub operation: Option<String>,    // query to filter the data
     pub column: Option<String>,   // column to apply aggreagation on
 }
@@ -49,15 +49,14 @@ fn main() {
 
     //---------------------------VARIABLES-----------------------------------
 
-    let (reader, _) = read_file(&args.filename); // data
-    // let fields = reader.metadata().file_metadata().schema().get_fields();
+    let (reader, _) = read_file(&args.filename);
     let number_of_threads =  reader.metadata().file_metadata().schema().get_fields().len(); // then number of threads is equal to the number of columns/fields
 
     let vec_storage = Arc::new(Mutex::new(vec![])); // stores the records after reading them
 
 
     let counter = Arc::new(Mutex::new(0 as usize)); // this keeps count of the threads we created so far and it is shared between the threads
-    let total_num_read_records = Arc::new(Mutex::new(0 as usize)); // this keeps count of the threads we created so far and it is shared between the threads
+    let total_num_read_records = Arc::new(Mutex::new(0 as usize)); // this keeps count of the number of read records so far
     let mut handles = vec![]; // this is the vector of handles of all the created threads so that the main waits for them to finish before continuing the execution of the code
 
     //---------------------------------SPAWNING LOOP------------------------------
@@ -83,10 +82,12 @@ fn main() {
             for i in 0 ..reader.num_row_groups() 
             // looping over the chunks of rows that the file is divided into
             {
-                let row_group = reader.get_row_group(i).unwrap();
-                let num_rows = row_group.metadata().num_rows();
+                let row_group = reader.get_row_group(i).unwrap(); // holding the current group (Chunk)
+                let num_rows = row_group.metadata().num_rows(); // gets the number fo rows in this chick to display it
                 println!("thread number {} row group {} with number of rows {} column name: {}",current_column_index, i,num_rows,reader.metadata().file_metadata().schema().get_fields()[current_column_index].name());
-                 match row_group.get_column_reader(current_column_index).unwrap() {
+                 match row_group.get_column_reader(current_column_index).unwrap() 
+                 //matching the type of the column reader of the current column
+                 {
                     ColumnReader::BoolColumnReader(_) => { println!("Bool"); },
                     ColumnReader::ByteArrayColumnReader(_) => { println!("Byte"); },
                     ColumnReader::DoubleColumnReader(_) => { println!("Double"); },
@@ -94,6 +95,7 @@ fn main() {
                     ColumnReader::FloatColumnReader(_) => { println!("FLoat"); },
                     ColumnReader::Int32ColumnReader(_) => { println!("Int32"); },
                     ColumnReader::Int64ColumnReader(v) => { 
+                        //if the column rader is of type int64
                         println!("Int64");
                         let (column, count) = read_i64(v, num_rows as usize); // where columns is a vector of ints and count is the number of recodrds read
                         column_vec_read.extend(column);
@@ -134,14 +136,16 @@ fn read_file(file_path: &str) -> (SerializedFileReader<File>, Type) {
 }
 
 fn read_i64(mut column_reader: ColumnReaderImpl<Int64Type>, num_rows: usize) -> (Vec<i64>, usize) {
-    let mut data = vec![];
-    const BATCH_SIZE: usize = 100;
-    let mut count = 0;
-    for _ in 0..(num_rows as f64 / BATCH_SIZE as f64).ceil() as i64 {
-        let mut values: [i64; BATCH_SIZE] = [0; BATCH_SIZE];
-        let (num, _) = column_reader.read_batch(BATCH_SIZE, None, None, &mut values).unwrap();
+    let mut data = vec![]; // the vector that we shall return holding the data/records that we have read
+    const BATCH_SIZE: usize = 100; // we divided the current column into batches
+    let mut count = 0; // holds the total number of read records
+    for _ in 0..(num_rows as f64 / BATCH_SIZE as f64).ceil() as i64 
+    //looping over the number of batches that we divided the number of rows on
+    {
+        let mut values: [i64; BATCH_SIZE] = [0; BATCH_SIZE]; // values is an array with size batch_size and initialized with zeros
+        let (num, _) = column_reader.read_batch(BATCH_SIZE, None, None, &mut values).unwrap(); // num holds the number of read record in this batch
         count += num;
-        data.extend(values);
+        data.extend(values);//concatenating the current read batch with the previous ones
     }
     (data, count)
 }
