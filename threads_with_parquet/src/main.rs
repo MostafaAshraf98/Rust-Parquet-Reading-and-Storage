@@ -14,10 +14,12 @@ use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::Field;
 use parquet::record::{Row, RowAccessor};
 use parquet::schema::types::Type;
+use parquet::column::reader::ColumnReaderImpl;
+use parquet::data_type::{Int64Type};
+use parquet::column::reader::ColumnReader;
 
 pub struct Args {
     pub filename: String, // the CSV file to read (the path)
-    pub number_of_threads: u64,
     pub group_by: Option<String>, // list of columns to display
     pub operation: Option<String>,    // query to filter the data
     pub column: Option<String>,   // column to apply aggreagation on
@@ -27,7 +29,6 @@ impl Args {
     pub fn new() -> Args {
         Args {
             filename: String::new(),
-            number_of_threads: 0,
             group_by: None,
             operation: None,
             column: None,
@@ -41,34 +42,29 @@ fn main() {
     //---------------------------ARGS-------------------------------
     let mut args: Args = Args::new();
     args.filename = env::args().nth(1).expect("Missing file path");
-    args.number_of_threads = env::args()
-        .nth(2)
-        .expect("Missing number of threads")
-        .parse()
-        .expect("Unable to parse the number of threads");
-    args.group_by = env::args().nth(3);
-    args.operation = env::args().nth(4);
-    args.column = env::args().nth(5);
+    args.group_by = env::args().nth(2);
+    args.operation = env::args().nth(3);
+    args.column = env::args().nth(4);
     let filename_thread = Arc::new(String::from(args.filename.clone())); //this serves as a shared ownership variable between threads
 
     //---------------------------VARIABLES-----------------------------------
 
     let (reader, _) = read_file(&args.filename); // data
+    // let fields = reader.metadata().file_metadata().schema().get_fields();
+    let number_of_threads =  reader.metadata().file_metadata().schema().get_fields().len(); // then number of threads is equal to the number of columns/fields
 
-    // let count_records: u64 = reader.lines().fold(0, |sum, _| sum + 1); // the number of records in the file
-    let count_records = reader.metadata().file_metadata().num_rows();// the number of records in the file
-    println!("The number of records in the file is: {}", count_records);
-    let part_each: u64 = (count_records as f64 / args.number_of_threads as f64).ceil() as u64; //the number of records each thread will take
-    println!("part_each = {}",part_each);
     let vec_storage = Arc::new(Mutex::new(vec![])); // stores the records after reading them
 
-    let counter = Arc::new(Mutex::new(0)); // this keeps count of the threads we created so far and it is shared between the threads
+
+    let counter = Arc::new(Mutex::new(0 as usize)); // this keeps count of the threads we created so far and it is shared between the threads
+    let total_num_read_records = Arc::new(Mutex::new(0 as usize)); // this keeps count of the threads we created so far and it is shared between the threads
     let mut handles = vec![]; // this is the vector of handles of all the created threads so that the main waits for them to finish before continuing the execution of the code
 
     //---------------------------------SPAWNING LOOP------------------------------
-    for _ in 0..args.number_of_threads {
+    for _ in 0..number_of_threads {
         // looping over the number of threads
         let counter = Arc::clone(&counter); // this is a a clone/reference that points to the same allocation of the counter variable
+        let total_num_read_records = Arc::clone(&total_num_read_records);
         let vec_storage = Arc::clone(&vec_storage); // clone of the vector storage
         let filename_thread = Arc::clone(&filename_thread); // clone of the filename
 
@@ -77,31 +73,43 @@ fn main() {
             // the thread takes ownership of all the variables that is within its scope
             {
             let mut counter_lock = counter.lock().unwrap(); //locking the shared variable counter before modifying it
-            let start: usize = ((*counter_lock) * part_each) as usize; //the number of starting line in
-            // println!("The thread number {} starts at {}",num, start);
+            let current_column_index = *counter_lock ; //the index of the column that this thread is reading
             *counter_lock += 1; // incrementing the count of the created threads
             drop(counter_lock); //drops the lock over this variable as we do not need it anymore in this scope
-
             
-            let (reader, _) = read_file(& *filename_thread); // data
-            let mut current_row_iter:parquet::record::reader::RowIter = reader.get_row_iter(None).unwrap();
-            for _ in 0..start-1 {
-             current_row_iter.next();
+            
+            let (reader, _) = read_file(& *filename_thread);
+            let mut column_vec_read=vec![];
+            for i in 0 ..reader.num_row_groups() 
+            // looping over the chunks of rows that the file is divided into
+            {
+                let row_group = reader.get_row_group(i).unwrap();
+                let num_rows = row_group.metadata().num_rows();
+                println!("thread number {} row group {} with number of rows {} column name: {}",current_column_index, i,num_rows,reader.metadata().file_metadata().schema().get_fields()[current_column_index].name());
+                 match row_group.get_column_reader(current_column_index).unwrap() {
+                    ColumnReader::BoolColumnReader(_) => { println!("Bool"); },
+                    ColumnReader::ByteArrayColumnReader(_) => { println!("Byte"); },
+                    ColumnReader::DoubleColumnReader(_) => { println!("Double"); },
+                    ColumnReader::FixedLenByteArrayColumnReader(_) => { println!("FixedLen"); },
+                    ColumnReader::FloatColumnReader(_) => { println!("FLoat"); },
+                    ColumnReader::Int32ColumnReader(_) => { println!("Int32"); },
+                    ColumnReader::Int64ColumnReader(v) => { 
+                        println!("Int64");
+                        let (column, count) = read_i64(v, num_rows as usize); // where columns is a vector of ints and count is the number of recodrds read
+                        column_vec_read.extend(column);
+                        let mut total_num_read_records_lock = total_num_read_records.lock().unwrap();
+                        *total_num_read_records_lock += count;
+                        drop(total_num_read_records_lock);
+                    },             
+                    ColumnReader::Int96ColumnReader(_) => { 
+                        println!("Int96"); 
+                    },
                 }
-
-            let mut line: String = String::new(); // serves as a buffer;
-            let mut vec: Vec<String> = Vec::new(); // the vector that stores the records of the current thread;
-            for _ in 0..part_each {
-                let current_row: Row= current_row_iter.next().unwrap(); 
-                let columns_vec= current_row.get_column_iter().collect();
-                vec.push(columns_vec);
-                // vec.push(current_row); // we need to push a clone of it
-                line.clear();
             }
                 let mut vec_storage_lock = vec_storage.lock().unwrap(); //locking the shared vector
-                vec_storage_lock.push(vec.clone());
+                vec_storage_lock.push(column_vec_read.clone());
                 drop(vec_storage_lock); //drops the lock over this variable as we do not need it anymore in this scope
-                vec.clear();
+                column_vec_read.clear();
             }
         );
         handles.push(handle); //add the handle of the created thread to the vector
@@ -110,7 +118,7 @@ fn main() {
         handle.join().unwrap(); // waits for all the threads to finish
     }
 
-     println!("The number of read record is: {}",(*vec_storage.lock().unwrap()).len()); // see if we successfully read all the records 
+     println!("The number of read record is: {}",*total_num_read_records.lock().unwrap()); // see if we successfully read all the records 
     
     let end_time = start_time.elapsed(); // calculates the elapsed time
     println!("The reading time is: {:?}", end_time);
@@ -123,4 +131,17 @@ fn read_file(file_path: &str) -> (SerializedFileReader<File>, Type) {
     let reader = SerializedFileReader::new(file).unwrap(); 
     let schema = reader.metadata().file_metadata().schema().clone(); //gets metadata information about the Parquet file
     (reader, schema)
+}
+
+fn read_i64(mut column_reader: ColumnReaderImpl<Int64Type>, num_rows: usize) -> (Vec<i64>, usize) {
+    let mut data = vec![];
+    const BATCH_SIZE: usize = 100;
+    let mut count = 0;
+    for _ in 0..(num_rows as f64 / BATCH_SIZE as f64).ceil() as i64 {
+        let mut values: [i64; BATCH_SIZE] = [0; BATCH_SIZE];
+        let (num, _) = column_reader.read_batch(BATCH_SIZE, None, None, &mut values).unwrap();
+        count += num;
+        data.extend(values);
+    }
+    (data, count)
 }
