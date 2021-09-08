@@ -1,6 +1,6 @@
-use parquet::basic::Type as PhysicalType;
+// use parquet::basic::Type as PhysicalType;
 use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::Field;
+// use parquet::record::Field;
 use parquet::record::{Row, RowAccessor};
 use parquet::schema::types::Type;
 use std::collections::HashMap;
@@ -49,7 +49,7 @@ fn do_operation(
     column: &str,
     group_by: &str,
 ) -> Result<HashMap<i64, f64>, ()> {
-    let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
+    // let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
     match operation.as_ref() {
         "avg" => Err(()),
         "sum" => sum(data, schema, column, group_by),
@@ -160,22 +160,22 @@ fn sum(
 //     _ => {}
 // }
 
-fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
-    let mut column_idx: usize = 0;
-    let mut group_by_idx: usize = 0;
-    // get idx of columns
-    let mut i = 0;
-    for f in schema.get_fields() {
-        if f.name() == column {
-            column_idx = i;
-        }
-        if f.name() == group_by {
-            group_by_idx = i;
-        }
-        i += 1;
-    }
-    (column_idx, group_by_idx)
-}
+// fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
+//     let mut column_idx: usize = 0;
+//     let mut group_by_idx: usize = 0;
+//     // get idx of columns
+//     let mut i = 0;
+//     for f in schema.get_fields() {
+//         if f.name() == column {
+//             column_idx = i;
+//         }
+//         if f.name() == group_by {
+//             group_by_idx = i;
+//         }
+//         i += 1;
+//     }
+//     (column_idx, group_by_idx)
+// }
 
 fn read_file(file_path: &str) -> (SerializedFileReader<File>, Type) {
     let file = File::open(&Path::new(file_path)).unwrap();
