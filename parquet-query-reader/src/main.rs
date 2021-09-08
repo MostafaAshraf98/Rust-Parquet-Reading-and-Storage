@@ -1,19 +1,19 @@
+// use parquet::basic::Type as PhysicalType;
+use parquet::file::reader::{FileReader, SerializedFileReader};
+// use parquet::record::Field;
+use parquet::record::{Row, RowAccessor};
+use parquet::schema::types::Type;
+use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::path::Path;
-use std::collections::HashMap;
-use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::{Row, RowAccessor};
 use std::time::Instant;
-use std::env;
-use parquet::schema::types::Type;
-use parquet::basic::Type as PhysicalType;
-use parquet::record::Field;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let (file_path, operation, column, group_by) = parse_args(&args);
 
-    let now = Instant::now();    
+    let now = Instant::now();
     let (data, schema) = read_file(file_path);
     let reading_time = now.elapsed();
     println!("Reading File {:.3?}", reading_time);
@@ -21,12 +21,11 @@ fn main() {
     // for f in schema.get_fields() {
     //     println!("{:?}", f);
     // }
-
     // for r in data {
     //     println!("{}", r);
     // }
 
-    let now = Instant::now();    
+    let now = Instant::now();
     let result = do_operation(&data, &schema, &operation, &column, &group_by);
     let reading_time = now.elapsed();
     println!("Operation {:.3?}", reading_time);
@@ -43,26 +42,35 @@ fn main() {
     }
 }
 
-fn do_operation(data: &SerializedFileReader<File>, schema: &Type, operation: &str, column: &str, group_by: &str) -> Result<HashMap<i64, f64>, ()> {
-    let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
+fn do_operation(
+    data: &SerializedFileReader<File>,
+    schema: &Type,
+    operation: &str,
+    column: &str,
+    group_by: &str,
+) -> Result<HashMap<i64, f64>, ()> {
+    // let (column_idx, group_by_idx) = get_idx(schema, column, group_by);
     match operation.as_ref() {
         "avg" => Err(()),
         "sum" => sum(data, schema, column, group_by),
-        _ => Err(())
+        _ => Err(()),
     }
 }
 
-fn sum(reader: &SerializedFileReader<File>, schema: &Type, column: &str, group_by: &str) -> Result<HashMap<i64, f64>, ()> {
+fn sum(
+    reader: &SerializedFileReader<File>,
+    schema: &Type,
+    column: &str,
+    group_by: &str,
+) -> Result<HashMap<i64, f64>, ()> {
     let mut sum: HashMap<i64, f64> = HashMap::new();
 
     //----------------- create schema projection
     let requested_fields = vec![column, group_by];
-		
     let mut selected_fields = schema.get_fields().to_vec();
-    if requested_fields.len()>0{
-        selected_fields.retain(|f|  
-            requested_fields.contains(&f.name()));
-    }			
+    if requested_fields.len() > 0 {
+        selected_fields.retain(|f| requested_fields.contains(&f.name()));
+    }
 
     // Now build a schema from these selected fields:
     let schema_projection = Type::group_type_builder("schema")
@@ -70,12 +78,15 @@ fn sum(reader: &SerializedFileReader<File>, schema: &Type, column: &str, group_b
         .build()
         .unwrap();
 
-    let data: Vec<Row> = reader.get_row_iter(Some(schema_projection)).unwrap().collect();
-    
+    let data: Vec<Row> = reader
+        .get_row_iter(Some(schema_projection))
+        .unwrap()
+        .collect();
     let mut column_idx = 0;
     let mut group_by_idx = 1;
     if data[0].get_column_iter().nth(0).unwrap().0 == group_by {
-        column_idx = 1; group_by_idx = 0;
+        column_idx = 1;
+        group_by_idx = 0;
     }
 
     //------------using row accessor
@@ -149,24 +160,22 @@ fn sum(reader: &SerializedFileReader<File>, schema: &Type, column: &str, group_b
 //     _ => {}
 // }
 
-fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
-    let mut column_idx: usize = 0;
-    let mut group_by_idx: usize = 0;
-    
-    // get idx of columns
-    let mut i = 0;
-    for f in schema.get_fields() {
-        if f.name() == column {
-            column_idx = i;
-        } 
-        if f.name() == group_by {
-            group_by_idx = i;
-        }
-        i+=1;
-    }
-    (column_idx, group_by_idx)
-}
-
+// fn get_idx(schema: &Type, column: &str, group_by: &str) -> (usize, usize) {
+//     let mut column_idx: usize = 0;
+//     let mut group_by_idx: usize = 0;
+//     // get idx of columns
+//     let mut i = 0;
+//     for f in schema.get_fields() {
+//         if f.name() == column {
+//             column_idx = i;
+//         }
+//         if f.name() == group_by {
+//             group_by_idx = i;
+//         }
+//         i += 1;
+//     }
+//     (column_idx, group_by_idx)
+// }
 
 fn read_file(file_path: &str) -> (SerializedFileReader<File>, Type) {
     let file = File::open(&Path::new(file_path)).unwrap();

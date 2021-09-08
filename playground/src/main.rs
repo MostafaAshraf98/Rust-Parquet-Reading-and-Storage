@@ -1,7 +1,6 @@
-extern crate indexed_line_reader;
 
 use indexed_line_reader::*;
-use rayon::prelude::*;
+// use rayon::prelude::*;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -11,7 +10,7 @@ use std::time::Instant;
 
 pub struct Args {
     pub filename: String, // the CSV file to read (the path)
-    number_of_threads: u64,
+    pub number_of_threads: u64,
     pub group_by: Option<String>, // list of columns to display
     pub query: Option<String>,    // query to filter the data
     pub select: Option<String>,   // column to apply aggreagation on
