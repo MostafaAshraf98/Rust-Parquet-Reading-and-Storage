@@ -9,3 +9,7 @@ https://crates.io/crates/rayon
 
 ## Effectively Access Parquet Formatted Data From Rust
 https://colinsblog.net/2021-07-27-reading-parquet-with-rust/
+
+## Parquet Documentation
+
+https://parquet.apache.org/documentation/latest/
