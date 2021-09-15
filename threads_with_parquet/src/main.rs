@@ -95,7 +95,7 @@ fn main() {
                     ColumnReader::FloatColumnReader(_) => { println!("FLoat"); },
                     ColumnReader::Int32ColumnReader(_) => { println!("Int32"); },
                     ColumnReader::Int64ColumnReader(v) => { 
-                        //if the column rader is of type int64
+                        //if the column reader is of type int64
                         println!("Int64");
                         let (column, count) = read_i64(v, num_rows as usize); // where columns is a vector of ints and count is the number of recodrds read
                         column_vec_read.extend(column);
@@ -110,6 +110,7 @@ fn main() {
             }
                 let mut vec_storage_lock = vec_storage.lock().unwrap(); //locking the shared vector
                 vec_storage_lock.push(column_vec_read.clone());
+                // vec_storage_lock.extend(column_vec_read.clone());
                 drop(vec_storage_lock); //drops the lock over this variable as we do not need it anymore in this scope
                 column_vec_read.clear();
             }
